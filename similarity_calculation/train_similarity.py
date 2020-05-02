@@ -14,7 +14,10 @@ data_path_kui = '../data/pre_data_kui.txt'
 # path_patch_test = '/Users/haoye.tian/Documents/University/data/kui_patches/Patches_test'
 path_patch_train = '../data/train_data5_frag.txt'
 
-code2vec_path = '../pretrained_models/code2vec_token.txt'
+# Begin For code2vec
+path_patch_train = '../data/train_data5_frag_code2vec.txt'
+code2vec_path = '/Users/abdoulkader.kabore/snt/code2vec/models/code2vec/w2v_tokens_format.txt'
+# End
 
 def load_data(data_path, bugName=None):
 
@@ -47,8 +50,7 @@ def bert(df):
     # tokenize
     df['buggy'] = df['buggy'].map(lambda x: word_tokenize(x))
     df['patched'] = df['patched'].map(lambda x: word_tokenize(x))
-    print(df['buggy'])
-    exit()
+    
     # result = cosine_similarity(bc.encode(list(np.array(df_quick['buggy']))),bc.encode(list(np.array(df_quick['patched']))))
     df['simi'] = None
     bc = BertClient(check_length=False)
@@ -163,18 +165,12 @@ def code2vec(df, code2vec_path):
         result = cosine_similarity(bug_vec,patched_vec)
         df.loc[index,'simi'] = float(result[0][0])
     df = df.sort_values(by='simi')
-    print(df.head())
+    
     print('the minimum similarity is {}'.format(df['simi'].head(1).values[0]))
     print('the average similarity is {}'.format(np.mean(np.array(df[['simi']]))))
     print('the median similarity is {}'.format(np.median(np.array(df[['simi']]))))
 
-    re = ''
-    # re += 'the minimum similarity is {}'.format(df['simi'].head(1).values[0]) + '\n'
-    # re += 'the average similarity is {}'.format(np.mean(np.array(df[['simi']]))) + '\n'
-    # re += 'the median similarity is {}'.format(np.median(np.array(df[['simi']]))) + '\n'
-
-    # np.savetxt(r'../data/train_result_bert.txt', df[['bugid', 'simi']].values, fmt='%s', header=re)
-    df[['bugid','simi']].to_csv('../data/experiment1/train_result_frag_code2vec.csv', header=None, index=None, sep=' ', mode='a+')
+    df[['bugid','simi']].to_csv('../data/experiment1/train_result_frag_code2vec.csv', header=None, index=None, sep=' ', mode='w')
 
 if __name__ == '__main__':
     # df = load_data(data_path,'patch_quicksort')
