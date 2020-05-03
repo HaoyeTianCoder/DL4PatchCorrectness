@@ -1,0 +1,39 @@
+--- /tmp/Arja_IntroClassJava_digits_070455301c2e18c7c89b850c2e86c311ac5fd223c84e723591012e163d60f11f5fd030343a444049a44940f8607d36c463f30556bf1efa98916d7417c2b4393c_002/src/main/java/introclassJava/digits_07045530_002.java	2018-11-05 17:59:09.713646000 -0500
++++ /tmp/Arja_IntroClassJava_digits_070455301c2e18c7c89b850c2e86c311ac5fd223c84e723591012e163d60f11f5fd030343a444049a44940f8607d36c463f30556bf1efa98916d7417c2b4393c_002/patches_ns00/Patch_1046/patched/tmp/Arja_IntroClassJava_digits_070455301c2e18c7c89b850c2e86c311ac5fd223c84e723591012e163d60f11f5fd030343a444049a44940f8607d36c463f30556bf1efa98916d7417c2b4393c_002/src/main/java/introclassJava/digits_07045530_002.java	2018-12-02 18:45:36.025642594 -0500
+@@ -60,7 +60,25 @@
+         IntObj n = new IntObj (), r = new IntObj (), nn = new IntObj ();
+         output += (String.format ("\nEnter an integer > "));
+         n.value = scanner.nextInt ();
+-        while (n.value != 0) {
++        if (n.value < 0) {
++			n.value = -n.value;
++			while (n.value != 0) {
++				r.value = n.value % 10;
++				nn.value = n.value / 10;
++				if (n.value < 10) {
++					output += (String.format("\n-%d", r.value));
++				} else if (n.value >= 10) {
++					output += (String.format("\n%d", r.value));
++				}
++				n.value = nn.value;
++			}
++		} else {
++			r.value = n.value % 10;
++			nn.value = n.value / 10;
++			n.value = nn.value;
++			output += (String.format("\n%d", r.value));
++		}
++		while (n.value != 0) {
+             if (n.value < 0) {
+                 n.value = -n.value;
+                 while (n.value != 0) {
+@@ -82,6 +100,6 @@
+         }
+         output += (String.format ("\nThat's all, have a nice day!\n"));
+         if (true)
+-            return;;
++            return;output += (String.format("\nEnter an integer > "));
+     }
+ }
+
+

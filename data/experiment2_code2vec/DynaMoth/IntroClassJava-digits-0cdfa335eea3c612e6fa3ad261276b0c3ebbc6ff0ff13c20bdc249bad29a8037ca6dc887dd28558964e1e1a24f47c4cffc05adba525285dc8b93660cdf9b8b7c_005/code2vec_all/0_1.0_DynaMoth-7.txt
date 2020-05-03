@@ -1,0 +1,9 @@
+--- a/src/main/java/introclassJava/digits_0cdfa335_005.java
++++ b/src/main/java/introclassJava/digits_0cdfa335_005.java
+@@ -68,3 +68,5 @@
+         if (i.value / i.value == 1) {
+-            i.value += 1.00;
++            if (false) {
++                i.value += 1.00;
++            }
+         }
