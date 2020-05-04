@@ -124,12 +124,19 @@ def code2vec(df, code2vec_path, threshold):
                 if b in code2vec_model.vocab:
                     patch_tokens.append(b)
 
+            if len(buggy_tokens) == 0 or len(patch_tokens) == 0:
+                continue
+
             bug_vec = code2vec_model[buggy_tokens]
             patched_vec = code2vec_model[patch_tokens]
+
+            bug_vec = np.average(bug_vec, axis=0)
+            patched_vec = np.average(patched_vec, axis=0)
+
         except Exception as e:
             print(e)
             continue
-        result = cosine_similarity(bug_vec,patched_vec)
+        result = cosine_similarity([bug_vec], [patched_vec])
         df.loc[index,'simi'] = float(result[0][0])
     df = df.sort_values(by='simi')
     df.index = range(len(df))

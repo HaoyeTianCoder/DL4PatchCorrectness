@@ -17,38 +17,67 @@ MAX_PATH_LENGTH = 8
 MAX_PATH_WIDTH = 2
 TMP_FOLDER = 'tmp'
 
-output_file_path = '../data/train_data5_frag_code2vec.txt'
+benchmarks = ["Bears", "Bugs.jar", "Defects4J", "IntroClassJava","QuixBugs"]
+tools = ["Arja", "GenProg", "Kali", "RSRepair", "Cardumen", "jGenProg", "jKali", "jMutRepair", "Nopol", "DynaMoth", "NPEFix"]
 
-def get_deep_files(dir_path, extensions=['.txt', '.patch']):
-    for root, dirs, files in os.walk(dir_path):
-        for f in files:
-            _, extension = os.path.splitext(f)
-            if extension in extensions:
-                yield root, os.path.join(root, f)
+def get_deep_files(dir_path, extensions=['.txt', '.patch'], paired=False):
+    if paired:
+        os.chdir(dir_path)
+        buggy_files = glob.iglob(dir_path + '/**/*-buggyCode.txt', recursive=True)
+        for buggy_file in buggy_files:
+            tmp = buggy_file.partition("-")
+            patch_file = tmp[0] + '-' + tmp[2].split('-')[0] + "-patchcode.txt"
+            yield buggy_file, patch_file
+    else:
+        for root, dirs, files in os.walk(dir_path):
+            for f in files:
+                _, extension = os.path.splitext(f)
+                if extension in extensions:
+                    yield root, os.path.join(root, f)
+    
 
-def create_train_data5_frag(path_patch_train):
-    with open(output_file_path, 'w+') as f:
-        data = ''
-        for root, dirs, files in os.walk(path_patch_train):
-            if files == ['.DS_Store']:
+def get_buggy_patch(path_patch_test):
+    for benchmark in sorted(benchmarks):
+        benchmark_path = os.path.join(path_patch_test, benchmark)
+        for project in sorted(os.listdir(benchmark_path)):
+            if project.startswith('.'):
                 continue
-            for file in files:
-                if file.endswith('txt') or file.endswith('patch'):
-                    if file.endswith('.patch'):
-                        bug_id = '_'.join([root.split('/')[-2],root.split('/')[-1], file])
-                    else:
-                        bug_id = '_'.join([root.split('/')[-1],file])
-                    try:
-                        buggy = get_diff_files(os.path.join(root,file),type='buggy')
-                        patched = get_diff_files(os.path.join(root, file), type='patched')
-                    except Exception as e:
-                        print(e)
+            project_path = os.path.join(benchmark_path, project)
+            folders = os.listdir(project_path)
+            if benchmark == "QuixBugs":
+                folders = [""]
+            for id in sorted(folders):
+                if id.startswith('.'):
+                    continue
+                bug_path = os.path.join(project_path, id)
+                for repair_tool in sorted(os.listdir(bug_path)):
+                    if repair_tool not in tools:
                         continue
-                    label_temp = '1'
-                    sample = label_temp + '<ml>' + bug_id + '<ml>' + buggy + '<ml>' + patched
-                    data += sample + '\n'
-                    
-        f.write(data)
+                    tool_path = os.path.join(bug_path, repair_tool)
+                    if not os.path.isdir(tool_path):
+                        continue
+                    for seed in sorted(os.listdir(tool_path)):
+                        if type(seed).__name__ == 'list' and len(seed) > 1:
+                            print('warning...')
+                        seed_path = os.path.join(tool_path, seed)
+                        results_path = os.path.join(seed_path, "result.json")
+                        if os.path.exists(results_path):
+                            with open(results_path, 'r') as f1:
+                                patch_dict = json.load(f1)
+                            patches = patch_dict['patches']
+                            if patches != []:
+                                for p in patches:
+                                    patch = []
+                                    if 'patch' in p:
+                                        patch = p['patch']
+                                        p_list = patch.split('\n')
+                                    elif 'PATCH_DIFF_ORIG' in p:
+                                        patch = p['PATCH_DIFF_ORIG']
+                                        p_list = patch.split('\\n')
+                                    
+                                    buggy = get_diff_files(p_list, type='buggy', withFile=False)
+                                    patched = get_diff_files(p_list, type='patched', withFile=False)
+                                    yield results_path, buggy, patched, patch, seed, id, benchmark, repair_tool, project
 
 def get_diff_files(file_path, type, withFile=True):
     if withFile:
@@ -99,90 +128,39 @@ def get_diff_files(file_path, type, withFile=True):
 
     return lines
 
-def process_file(file_path, data_file_role, dataset_name, word_to_count, path_to_count, max_contexts):
-    print(file_path)
-    sum_total = 0
-    sum_sampled = 0
-    total = 0
-    empty = 0
-    max_unfiltered = 0
-    output_path = '{}.{}.c2v'.format(dataset_name, data_file_role)
-    with open(output_path, 'w') as outfile:
-        with open(file_path, 'r') as file:
-            for line in file:
-                parts = line.rstrip('\n').split(' ')
-                target_name = parts[0]
-                contexts = parts[1:]
-
-                if len(contexts) > max_unfiltered:
-                    max_unfiltered = len(contexts)
-                sum_total += len(contexts)
-
-                if len(contexts) > max_contexts:
-                    context_parts = [c.split(',') for c in contexts]
-                    full_found_contexts = [c for i, c in enumerate(contexts)
-                                           if context_full_found(context_parts[i], word_to_count, path_to_count)]
-                    partial_found_contexts = [c for i, c in enumerate(contexts)
-                                              if context_partial_found(context_parts[i], word_to_count, path_to_count)
-                                              and not context_full_found(context_parts[i], word_to_count,
-                                                                         path_to_count)]
-                    if len(full_found_contexts) > max_contexts:
-                        contexts = random.sample(full_found_contexts, max_contexts)
-                    elif len(full_found_contexts) <= max_contexts \
-                            and len(full_found_contexts) + len(partial_found_contexts) > max_contexts:
-                        contexts = full_found_contexts + \
-                                   random.sample(partial_found_contexts, max_contexts - len(full_found_contexts))
-                    else:
-                        contexts = full_found_contexts + partial_found_contexts
-
-                if len(contexts) == 0:
-                    empty += 1
-                    continue
-
-                sum_sampled += len(contexts)
-
-                csv_padding = " " * (max_contexts - len(contexts))
-                outfile.write(target_name + ' ' + " ".join(contexts) + csv_padding + '\n')
-                total += 1
-
-    print('File: ' + data_file_path)
-    print('Average total contexts: ' + str(float(sum_total) / total))
-    print('Average final (after sampling) contexts: ' + str(float(sum_sampled) / total))
-    print('Total examples: ' + str(total))
-    print('Empty examples: ' + str(empty))
-    print('Max number of contexts per word: ' + str(max_unfiltered))
-    return total
-
-def context_full_found(context_parts, word_to_count, path_to_count):
-    return context_parts[0] in word_to_count \
-           and context_parts[1] in path_to_count and context_parts[2] in word_to_count
-
-
-def context_partial_found(context_parts, word_to_count, path_to_count):
-    return context_parts[0] in word_to_count \
-           or context_parts[1] in path_to_count or context_parts[2] in word_to_count
-
-def process(path, f, type, id_path):
+def process(path, f, type, id_path, pathIsOk=False, fIsChanged=False):
     if not os.path.exists(id_path):
-        changes = get_diff_files(f, type=type)
+        if fIsChanged:
+            changes = f
+        else:
+            changes = get_diff_files(f, type=type)
         # print('Source Code')
         # print(changes)
         # print('\n\n')
-        file_path = path + '/' + datetime.datetime.now().strftime("%Y%m%d-%H%M%S.%f") + '_PATCH.java'
-        writer = io.open(file_path, 'w', encoding='utf-8')
-        writer.write(changes)
-        writer.close()
+
+        print(path)
+
+
+        if pathIsOk:
+            file_path = f
+        else:
+            file_path = path + '/' + datetime.datetime.now().strftime("%Y%m%d-%H%M%S.%f") + '_PATCH.java'
+            writer = io.open(file_path, 'w', encoding='utf-8')
+            writer.write(changes)
+            writer.close()
 
         command = 'java -cp ' + EXTRACTOR_JAR + ' JavaExtractor.App --max_path_length ' + \
                     str(MAX_PATH_LENGTH) + ' --max_path_width ' + str(MAX_PATH_WIDTH) + ' --file ' + file_path + ' > ' + id_path
         try:
             subprocess.check_call(command, shell=True, stderr=subprocess.STDOUT)
-        except subprocess.CalledProcessError:
+        except:
             return None
         
-        os.remove(file_path)
+        if not pathIsOk:
+            os.remove(file_path)
 
     lines = []
+    print(id_path)
     with open(id_path, 'r') as ff:
         for line in ff:
             lines.append(line)
@@ -190,11 +168,13 @@ def process(path, f, type, id_path):
 
 def retrieve_identifiers(input):
     data = []
+    if input is None:
+        return data
     for line in input:
         parts = line.rstrip('\n').split(' ')
         target_name = parts[0]
         contexts = parts[1:]
-        data.append(target_name)
+        # data.append(target_name)
         for c in contexts:
             tmp = c.split(',')
             del tmp[1]
@@ -211,50 +191,135 @@ def unique_list(l):
 
 
 if __name__ == '__main__':
-    dir_path = '../data/code2vec_train_data/Patches_train'
-    # dir_path = '.'
+    # output_file_path = '../data/train_data5_frag_code2vec.txt'
+    # output_file_path = '../data/test_data_code2vec.txt'
+    output_file_path = 'test.out'
+    out_writer = io.open(output_file_path, 'w+', encoding='utf-8')
+
+    # dir_path = '../data/code2vec_train_data/Patches_train'
+    dir_path = '/Users/abdoulkader.kabore/snt/patch_prediction/data/PatchesData/test'
+    # dir_path = '/Users/abdoulkader.kabore/snt/patch_prediction/data/code2vec_train_data/Patches_test'
+
     n = -1
     i = 0
     j = 0
-    data = ''
-    for root, f in get_deep_files(dir_path=dir_path):
-        head_tail = os.path.split(f) 
-        tmp = head_tail[0].split('/')
-        path = TMP_FOLDER + '/' + tmp[n]
-        try:
-            os.makedirs(path)
-        except OSError:
-            pass
-        else:
-            pass
-            
-        try:
+    method = 'kuiData'
 
-            if f.endswith('.patch'):
-                bug_id = '_'.join([root.split('/')[-2], root.split('/')[-1], head_tail[1]])
+    try:
+        os.makedirs(TMP_FOLDER)
+    except OSError:
+        pass
+
+    if method == 'json':
+        for f, buggy, patched, patch, seed, id, benchmark, repair_tool, project in get_buggy_patch(dir_path):
+            head_tail = os.path.split(f)
+            tmp = head_tail[0].split('/')
+            path = TMP_FOLDER + '/' + tmp[n]
+            try:
+                os.makedirs(path)
+            except OSError:
+                pass
             else:
-                bug_id = '_'.join([root.split('/')[-1], head_tail[1]])
+                pass
+            try:
+                bug_id = benchmark + '-' + project + '-' + id
+                patch_id = repair_tool + '-' + seed
 
-            buggy_id_path = path + bug_id + '_BUG.id'
-            patch_id_path = path + bug_id + '_PATCH.id'
+                buggy_id_path = path + bug_id + '_BUG.id'
+                patch_id_path = path + patch_id + '_PATCH.id'
 
-            b_output = process(path, f, 'buggy', buggy_id_path)
-            if b_output is not None and len(b_output) > 0:
-                p_output = process(path, f, 'patched', patch_id_path)
+                b_output = process(path, buggy, 'buggy', buggy_id_path, fIsChanged=True)
+                if b_output is not None and len(b_output) > 0:
+                    p_output = process(path, patched, 'patched', patch_id_path, fIsChanged=True)
 
-                buggy_tokens = retrieve_identifiers(b_output)
-                patch_tokens = retrieve_identifiers(p_output)
+                    buggy_tokens = retrieve_identifiers(b_output)
+                    patch_tokens = retrieve_identifiers(p_output)
 
-                if len(buggy_tokens) > 0 and len(patch_tokens) > 0:
-                    label_temp = '1'
-                    sample = label_temp + '<ml>' + bug_id + '<ml>' + ' '.join(buggy_tokens) + '<ml>' + ' '.join(patch_tokens)
-                    data += sample + '\n'
-                    i = i + 1
-        except:
-            j = j + 1
+                    if len(buggy_tokens) > 0 and len(patch_tokens) > 0:
+                        print(buggy_tokens)
+                        print(patch_tokens)
+                        label_temp = '1'
+                        sample = '<ml>'.join([label_temp, bug_id, patch_id, ' '.join(buggy_tokens), ' '.join(patch_tokens), '<dl>'.join(patch)])
+                        out_writer.write(sample.strip('\n') + '\n')
+                        i = i + 1
+                        continue
+                j = j + 1
+            except:
+                j = j + 1
+    elif method == 'kuiData':
+        for buggy_f, patch_f in get_deep_files(dir_path=dir_path, paired=True):
+            head_tail = os.path.split(buggy_f)
+            tmp = head_tail[0].split('/')
+            path = TMP_FOLDER + '/' + tmp[n]
+            try:
+                os.makedirs(path)
+            except OSError:
+                pass
+            else:
+                pass
+                
+            try:
+                bug_id = head_tail[1].split('buggyCode.txt')[0]
 
-    out_writer = io.open(output_file_path, 'w', encoding='utf-8')
-    out_writer.write(data)
+                buggy_id_path = path + bug_id + 'BUG.id'
+                patch_id_path = path + bug_id + 'PATCH.id'
+
+                b_output = process(path, buggy_f, 'buggy', buggy_id_path, pathIsOk=True)
+                if b_output is not None and len(b_output) > 0:
+                    p_output = process(path, patch_f, 'patched', patch_id_path, pathIsOk=True)
+
+                    buggy_tokens = retrieve_identifiers(b_output)
+                    patch_tokens = retrieve_identifiers(p_output)
+
+                    if len(buggy_tokens) > 0 and len(patch_tokens) > 0:
+                        label_temp = '1'
+                        sample = label_temp + '<ml>' + bug_id + '<ml>' + ' '.join(buggy_tokens) + '<ml>' + ' '.join(patch_tokens)
+                        out_writer.write(sample + '\n')
+                        i = i + 1
+                        continue
+                j = j + 1
+            except:
+                j = j + 1
+            
+    else:
+        for root, f in get_deep_files(dir_path=dir_path):
+            head_tail = os.path.split(f) 
+            tmp = head_tail[0].split('/')
+            path = TMP_FOLDER + '/' + tmp[n]
+            try:
+                os.makedirs(path)
+            except OSError:
+                pass
+            else:
+                pass
+                
+            try:
+                if f.endswith('.patch'):
+                    bug_id = '_'.join([root.split('/')[-2], root.split('/')[-1], head_tail[1]])
+                else:
+                    bug_id = '_'.join([root.split('/')[-1], head_tail[1]])
+
+                buggy_id_path = path + bug_id + '_BUG.id'
+                patch_id_path = path + bug_id + '_PATCH.id'
+
+                b_output = process(path, f, 'buggy', buggy_id_path)
+                if b_output is not None and len(b_output) > 0:
+                    p_output = process(path, f, 'patched', patch_id_path)
+
+                    buggy_tokens = retrieve_identifiers(b_output)
+                    patch_tokens = retrieve_identifiers(p_output)
+
+                    if len(buggy_tokens) > 0 and len(patch_tokens) > 0:
+                        label_temp = '1'
+                        sample = label_temp + '<ml>' + bug_id + '<ml>' + ' '.join(buggy_tokens) + '<ml>' + ' '.join(patch_tokens)
+                        out_writer.write(sample + '\n')
+                        i = i + 1
+                        continue
+                j = j + 1
+            except:
+                j = j + 1
+    
+    out_writer.close()
 
     print(i)
     print(j)

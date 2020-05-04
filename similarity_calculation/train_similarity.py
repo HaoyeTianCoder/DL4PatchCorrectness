@@ -15,8 +15,8 @@ data_path_kui = '../data/pre_data_kui.txt'
 path_patch_train = '../data/train_data5_frag.txt'
 
 # Begin For code2vec
-path_patch_train = '../data/train_data5_frag_code2vec.txt'
-code2vec_path = '/Users/abdoulkader.kabore/snt/code2vec/models/code2vec/w2v_tokens_format.txt'
+path_patch_train = '/Users/abdoulkader.kabore/snt/patch_prediction/data/train_data5_frag_code2vec.txt' #'../data/train_data5_frag_code2vec.txt'
+code2vec_path = '/Users/abdoulkader.kabore/snt/patch_prediction/pretrained_models/code2vec_token.txt'#'/Users/abdoulkader.kabore/snt/code2vec/models/code2vec/w2v_tokens_format.txt'
 # End
 
 def load_data(data_path, bugName=None):
@@ -24,9 +24,10 @@ def load_data(data_path, bugName=None):
     # bugName to be used to select a specific bug
     # data = np.loadtxt(data_path, dtype=str,comments=None, delimiter='<ml>')
     df = pd.read_csv(data_path,sep='<ml>')
+    
     df.columns = ["label", "bugid", "buggy", "patched"]
     # df = pd.DataFrame(data,dtype=str,columns=['label','bugid','buggy','patched'])
-    print(len(df))
+    
     #bugname experiment
     if bugName != None:
         df = df.loc[df['bugid'].str.startswith(bugName)]
@@ -65,7 +66,7 @@ def bert(df):
         except Exception as e:
             print(e)
             continue
-        result = cosine_similarity(bug_vec,patched_vec)
+        result = cosine_similarity(bug_vec, patched_vec)
         df.loc[index,'simi'] = float(result[0][0])
     df = df.sort_values(by='simi')
     print('the minimum similarity is {}'.format(df['simi'].head(1).values[0]))
@@ -157,12 +158,19 @@ def code2vec(df, code2vec_path):
                 if b in code2vec_model.vocab:
                     patch_tokens.append(b)
 
+            if len(buggy_tokens) == 0 or len(patch_tokens) == 0:
+                continue
+
             bug_vec = code2vec_model[buggy_tokens]
             patched_vec = code2vec_model[patch_tokens]
+
+            bug_vec = np.average(bug_vec, axis=0)
+            patched_vec = np.average(patched_vec, axis=0)
+
         except Exception as e:
             print(e)
             continue
-        result = cosine_similarity(bug_vec,patched_vec)
+        result = cosine_similarity([bug_vec], [patched_vec])
         df.loc[index,'simi'] = float(result[0][0])
     df = df.sort_values(by='simi')
     
@@ -170,7 +178,7 @@ def code2vec(df, code2vec_path):
     print('the average similarity is {}'.format(np.mean(np.array(df[['simi']]))))
     print('the median similarity is {}'.format(np.median(np.array(df[['simi']]))))
 
-    df[['bugid','simi']].to_csv('../data/experiment1/train_result_frag_code2vec.csv', header=None, index=None, sep=' ', mode='w')
+    df[['bugid','simi']].to_csv('../data/experiment1/TrainFrag_Code2Vec_Results.csv', header=None, index=None, sep=' ', mode='w')
 
 if __name__ == '__main__':
     # df = load_data(data_path,'patch_quicksort')
