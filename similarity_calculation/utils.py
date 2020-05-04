@@ -5,11 +5,13 @@ from nltk.tokenize import word_tokenize
 
 def my_split(text):
     tokens = []
+    # text = ''.join([i for i in text if not i.isdigit()])
     tmp = word_tokenize(text)
     for t in tmp:
         t = t.split('|')
         tokens.extend(t)
-    return tokens
+    # tokens = remove_special_chars(' '.join(tokens))
+    return tokens # tokens.split()
 
 
 def strip_comments(text):
